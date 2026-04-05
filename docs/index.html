@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PM Owner Reports</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; }
+    .header { background: #1a1a2e; color: white; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; }
+    .header h1 { font-size: 1.5rem; }
+    .nav { display: flex; gap: 0.5rem; }
+    .nav button { background: transparent; border: none; color: #aaa; padding: 0.5rem 1rem; cursor: pointer; font-size: 1rem; }
+    .nav button.active { color: white; border-bottom: 2px solid #00d4ff; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+    .card { background: white; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .card h2 { margin-bottom: 1rem; color: #1a1a2e; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
+    .property-card { border-left: 4px solid #00d4ff; }
+    .property-card h3 { margin-bottom: 0.5rem; }
+    .property-stats { display: flex; gap: 1rem; font-size: 0.9rem; color: #666; }
+    .btn { background: #00d4ff; color: #1a1a2e; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-weight: 500; }
+    .btn:hover { background: #00b8e6; }
+    .btn-secondary { background: #eee; color: #333; }
+    .btn-danger { background: #ff4757; color: white; }
+    .form-group { margin-bottom: 1rem; }
+    .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; }
+    .form-group input, .form-group select { width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; }
+    .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; }
+    .modal.open { display: flex; }
+    .modal-content { background: white; padding: 2rem; border-radius: 8px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto; }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+    .modal-header h2 { margin: 0; }
+    .close { background: none; border: none; font-size: 1.5rem; cursor: pointer; }
+    .tabs { display: flex; border-bottom: 1px solid #ddd; margin-bottom: 1rem; }
+    .tab { padding: 1rem; cursor: pointer; border-bottom: 2px solid transparent; }
+    .tab.active { border-bottom-color: #00d4ff; color: #00d4ff; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #eee; }
+    th { background: #f9f9f9; font-weight: 600; }
+    .report-preview { background: #f9f9f9; padding: 1rem; border-radius: 4px; margin: 1rem 0; }
+    .report-row { display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #eee; }
+    .report-row.total { font-weight: bold; border-top: 2px solid #333; margin-top: 0.5rem; padding-top: 0.5rem; }
+    .badge { background: #00d4ff; color: #1a1a2e; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
+    .empty { text-align: center; padding: 2rem; color: #999; }
+    .actions { display: flex; gap: 0.5rem; margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <h1>PM Owner Reports</h1>
+    <nav class="nav">
+      <button class="active" data-tab="properties">Properties</button>
+      <button data-tab="expenses">Expenses</button>
+      <button data-tab="owners">Owners</button>
+      <button data-tab="reports">Reports</button>
+    </nav>
+  </header>
+
+  <div class="container">
+    <!-- Properties Tab -->
+    <div id="properties" class="tab-content">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+          <h2>Properties</h2>
+          <button class="btn" onclick="openModal('property-modal')">+ Add Property</button>
+        </div>
+        <div id="properties-list" class="grid"></div>
+      </div>
+    </div>
+
+    <!-- Expenses Tab -->
+    <div id="expenses" class="tab-content" style="display:none;">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+          <h2>Expense Categories</h2>
+          <button class="btn" onclick="openModal('category-modal')">+ Add Category</button>
+        </div>
+        <div id="categories-list" style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem;"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin:1rem 0;">
+          <h2>Expenses</h2>
+          <button class="btn" onclick="openModal('expense-modal')">+ Add Expense</button>
+        </div>
+        <table>
+          <thead><tr><th>Date</th><th>Property</th><th>Category</th><th>Description</th><th>Amount</th><th></th></tr></thead>
+          <tbody id="expenses-list"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Owners Tab -->
+    <div id="owners" class="tab-content" style="display:none;">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+          <h2>Owners</h2>
+          <button class="btn" onclick="openModal('owner-modal')">+ Add Owner</button>
+        </div>
+        <table>
+          <thead><tr><th>Name</th><th>Email</th><th>Properties</th><th></th></tr></thead>
+          <tbody id="owners-list"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Reports Tab -->
+    <div id="reports" class="tab-content" style="display:none;">
+      <div class="card">
+        <h2>Generate Report</h2>
+        <div class="form-group">
+          <label>Select Property</label>
+          <select id="report-property"></select>
+        </div>
+        <div class="form-group">
+          <label>Month</label>
+          <select id="report-month"></select>
+        </div>
+        <div class="form-group">
+          <label>Year</label>
+          <select id="report-year"></select>
+        </div>
+        <button class="btn" onclick="generateReport()">Generate Preview</button>
+        <div id="report-preview"></div>
+      </div>
+      <div class="card">
+        <h2>Report History</h2>
+        <table>
+          <thead><tr><th>Date</th><th>Property</th><th>Period</th><th>Net Income</th><th></th></tr></thead>
+          <tbody id="reports-list"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modals -->
+  <div id="property-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header"><h2>Add Property</h2><button class="close" onclick="closeModal('property-modal')">&times;</button></div>
+      <form onsubmit="saveProperty(event)">
+        <div class="form-group"><label>Property Name</label><input type="text" id="prop-name" required></div>
+        <div class="form-group"><label>Address</label><input type="text" id="prop-address" required></div>
+        <div class="form-group"><label>Number of Units</label><input type="number" id="prop-units" min="1" value="1" required></div>
+        <div class="form-group"><label>Monthly Rent per Unit ($)</label><input type="number" id="prop-rent" min="0" required></div>
+        <button type="submit" class="btn">Save Property</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="category-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header"><h2>Add Category</h2><button class="close" onclick="closeModal('category-modal')">&times;</button></div>
+      <form onsubmit="saveCategory(event)">
+        <div class="form-group"><label>Category Name</label><input type="text" id="cat-name" required></div>
+        <button type="submit" class="btn">Save Category</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="expense-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header"><h2>Add Expense</h2><button class="close" onclick="closeModal('expense-modal')">&times;</button></div>
+      <form onsubmit="saveExpense(event)">
+        <div class="form-group"><label>Property</label><select id="exp-property" required></select></div>
+        <div class="form-group"><label>Date</label><input type="date" id="exp-date" required></div>
+        <div class="form-group"><label>Category</label><select id="exp-category" required></select></div>
+        <div class="form-group"><label>Description</label><input type="text" id="exp-desc" required></div>
+        <div class="form-group"><label>Amount ($)</label><input type="number" id="exp-amount" min="0" step="0.01" required></div>
+        <button type="submit" class="btn">Save Expense</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="owner-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header"><h2>Add Owner</h2><button class="close" onclick="closeModal('owner-modal')">&times;</button></div>
+      <form onsubmit="saveOwner(event)">
+        <div class="form-group"><label>Name</label><input type="text" id="owner-name" required></div>
+        <div class="form-group"><label>Email</label><input type="email" id="owner-email" required></div>
+        <div class="form-group"><label>Assign Properties</label><select id="owner-properties" multiple style="height:120px;"></select></div>
+        <button type="submit" class="btn">Save Owner</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // Data Store
+    const store = {
+      properties: JSON.parse(localStorage.getItem('pm_properties') || '[]'),
+      expenses: JSON.parse(localStorage.getItem('pm_expenses') || '[]'),
+      owners: JSON.parse(localStorage.getItem('pm_owners') || '[]'),
+      reports: JSON.parse(localStorage.getItem('pm_reports') || '[]'),
+      categories: JSON.parse(localStorage.getItem('pm_categories')) || ['Repairs', 'Maintenance', 'Utilities', 'Property Tax', 'Insurance', 'Management Fee', 'Other']
+    };
+
+    function saveData() {
+      localStorage.setItem('pm_properties', JSON.stringify(store.properties));
+      localStorage.setItem('pm_expenses', JSON.stringify(store.expenses));
+      localStorage.setItem('pm_owners', JSON.stringify(store.owners));
+      localStorage.setItem('pm_reports', JSON.stringify(store.reports));
+      localStorage.setItem('pm_categories', JSON.stringify(store.categories));
+    }
+
+    function uuid() { return crypto.randomUUID(); }
+
+    // Tab Navigation
+    document.querySelectorAll('.nav button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+        document.getElementById(btn.dataset.tab).style.display = 'block';
+        renderAll();
+      });
+    });
+
+    // Modal Functions
+    function openModal(id) {
+      document.getElementById(id).classList.add('open');
+      if (id === 'expense-modal') populateExpenseForm();
+      if (id === 'owner-modal') populateOwnerForm();
+    }
+    function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+    // Property Functions
+    function renderProperties() {
+      const container = document.getElementById('properties-list');
+      if (!store.properties.length) {
+        container.innerHTML = '<div class="empty">No properties yet. Add your first property!</div>';
+        return;
+      }
+      container.innerHTML = store.properties.map(p => {
+        const owner = store.owners.find(o => o.propertyIds?.includes(p.id));
+        const occupancy = 100;
+        const monthlyIncome = p.units * p.monthlyRent;
+        return `<div class="card property-card">
+          <h3>${p.name}</h3>
+          <p style="color:#666;margin-bottom:0.5rem;">${p.address}</p>
+          <div class="property-stats">
+            <span>${p.units} units</span>
+            <span>$${monthlyIncome.toLocaleString()}/mo</span>
+            <span>${owner ? owner.name : 'Unassigned'}</span>
+          </div>
+          <div class="actions">
+            <button class="btn btn-secondary" onclick="editProperty('${p.id}')">Edit</button>
+            <button class="btn btn-danger" onclick="deleteProperty('${p.id}')">Delete</button>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    function saveProperty(e) {
+      e.preventDefault();
+      const prop = {
+        id: uuid(),
+        name: document.getElementById('prop-name').value,
+        address: document.getElementById('prop-address').value,
+        units: parseInt(document.getElementById('prop-units').value),
+        monthlyRent: parseFloat(document.getElementById('prop-rent').value)
+      };
+      store.properties.push(prop);
+      saveData();
+      closeModal('property-modal');
+      e.target.reset();
+      renderProperties();
+    }
+
+    function deleteProperty(id) {
+      if (confirm('Delete this property?')) {
+        store.properties = store.properties.filter(p => p.id !== id);
+        store.owners.forEach(o => o.propertyIds = o.propertyIds?.filter(pid => pid !== id));
+        saveData();
+        renderProperties();
+      }
+    }
+
+    function editProperty(id) {
+      const p = store.properties.find(p => p.id === id);
+      document.getElementById('prop-name').value = p.name;
+      document.getElementById('prop-address').value = p.address;
+      document.getElementById('prop-units').value = p.units;
+      document.getElementById('prop-rent').value = p.monthlyRent;
+      openModal('property-modal');
+    }
+
+    // Category Functions
+    function renderCategories() {
+      const container = document.getElementById('categories-list');
+      container.innerHTML = store.categories.map(c => `<span class="badge">${c}</span>`).join('');
+    }
+
+    function saveCategory(e) {
+      e.preventDefault();
+      store.categories.push(document.getElementById('cat-name').value);
+      saveData();
+      closeModal('category-modal');
+      e.target.reset();
+      renderCategories();
+    }
+
+    // Expense Functions
+    function populateExpenseForm() {
+      const propSelect = document.getElementById('exp-property');
+      propSelect.innerHTML = store.properties.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+      const catSelect = document.getElementById('exp-category');
+      catSelect.innerHTML = store.categories.map(c => `<option value="${c}">${c}</option>`).join('');
+    }
+
+    function renderExpenses() {
+      const tbody = document.getElementById('expenses-list');
+      if (!store.expenses.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty">No expenses recorded</td></tr>';
+        return;
+      }
+      tbody.innerHTML = store.expenses.map(e => {
+        const prop = store.properties.find(p => p.id === e.propertyId);
+        return `<tr>
+          <td>${e.date}</td>
+          <td>${prop?.name || 'Unknown'}</td>
+          <td>${e.category}</td>
+          <td>${e.description}</td>
+          <td>$${parseFloat(e.amount).toFixed(2)}</td>
+          <td><button class="btn btn-danger" style="padding:0.25rem 0.5rem;" onclick="deleteExpense('${e.id}')">×</button></td>
+        </tr>`;
+      }).join('');
+    }
+
+    function saveExpense(e) {
+      e.preventDefault();
+      store.expenses.push({
+        id: uuid(),
+        propertyId: document.getElementById('exp-property').value,
+        date: document.getElementById('exp-date').value,
+        category: document.getElementById('exp-category').value,
+        description: document.getElementById('exp-desc').value,
+        amount: parseFloat(document.getElementById('exp-amount').value)
+      });
+      saveData();
+      closeModal('expense-modal');
+      e.target.reset();
+      renderExpenses();
+    }
+
+    function deleteExpense(id) {
+      store.expenses = store.expenses.filter(e => e.id !== id);
+      saveData();
+      renderExpenses();
+    }
+
+    // Owner Functions
+    function populateOwnerForm() {
+      const select = document.getElementById('owner-properties');
+      select.innerHTML = store.properties.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    }
+
+    function renderOwners() {
+      const tbody = document.getElementById('owners-list');
+      if (!store.owners.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="empty">No owners yet</td></tr>';
+        return;
+      }
+      tbody.innerHTML = store.owners.map(o => {
+        const props = o.propertyIds?.map(pid => store.properties.find(p => p.id === pid)?.name).filter(Boolean).join(', ') || 'None';
+        return `<tr>
+          <td>${o.name}</td>
+          <td>${o.email}</td>
+          <td>${props}</td>
+          <td><button class="btn btn-danger" style="padding:0.25rem 0.5rem;" onclick="deleteOwner('${o.id}')">Delete</button></td>
+        </tr>`;
+      }).join('');
+    }
+
+    function saveOwner(e) {
+      e.preventDefault();
+      const selected = Array.from(document.getElementById('owner-properties').selectedOptions).map(o => o.value);
+      store.owners.push({
+        id: uuid(),
+        name: document.getElementById('owner-name').value,
+        email: document.getElementById('owner-email').value,
+        propertyIds: selected
+      });
+      saveData();
+      closeModal('owner-modal');
+      e.target.reset();
+      renderOwners();
+    }
+
+    function deleteOwner(id) {
+      store.owners = store.owners.filter(o => o.id !== id);
+      saveData();
+      renderOwners();
+    }
+
+    // Report Functions
+    function populateReportForms() {
+      const propSelect = document.getElementById('report-property');
+      propSelect.innerHTML = store.properties.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+      
+      const monthSelect = document.getElementById('report-month');
+      const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+      monthSelect.innerHTML = months.map((m,i) => `<option value="${i+1}">${m}</option>`).join('');
+      
+      const yearSelect = document.getElementById('report-year');
+      const currentYear = new Date().getFullYear();
+      yearSelect.innerHTML = Array.from({length:3},(_,i)=>`<option value="${currentYear-i}">${currentYear-i}</option>`).join('');
+    }
+
+    function generateReport() {
+      const propertyId = document.getElementById('report-property').value;
+      const month = parseInt(document.getElementById('report-month').value);
+      const year = parseInt(document.getElementById('report-year').value);
+      
+      const property = store.properties.find(p => p.id === propertyId);
+      const income = property.units * property.monthlyRent;
+      
+      const monthExpenses = store.expenses.filter(e => {
+        const d = new Date(e.date);
+        return e.propertyId === propertyId && d.getMonth() + 1 === month && d.getFullYear() === year;
+      });
+      
+      const expensesByCategory = {};
+      monthExpenses.forEach(e => {
+        expensesByCategory[e.category] = (expensesByCategory[e.category] || 0) + parseFloat(e.amount);
+      });
+      
+      const totalExpenses = monthExpenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
+      const netIncome = income - totalExpenses;
+      
+      const monthName = ['January','February','March','April','May','June','July','August','September','October','November','December'][month-1];
+      
+      let html = `<div class="report-preview">
+        <h3>Income Statement - ${property.name}</h3>
+        <p style="color:#666;margin-bottom:1rem;">${property.address} | ${monthName} ${year}</p>
+        <div class="report-row"><span>Rental Income (${property.units} units × $${property.monthlyRent})</span><span>$${income.toLocaleString()}</span></div>
+        <h4 style="margin-top:1rem;">Expenses</h4>`;
+      
+      for (const [cat, amt] of Object.entries(expensesByCategory)) {
+        html += `<div class="report-row"><span>${cat}</span><span>$${amt.toFixed(2)}</span></div>`;
+      }
+      
+      html += `<div class="report-row total"><span>Net Cash Flow</span><span>$${netIncome.toLocaleString()}</span></div></div>`;
+      html += `<button class="btn" onclick="exportPDF('${propertyId}',${month},${year},${income},${totalExpenses},${netIncome})">Export PDF</button>`;
+      
+      document.getElementById('report-preview').innerHTML = html;
+      
+      // Save to history
+      store.reports.push({
+        id: uuid(),
+        propertyId,
+        year,
+        month,
+        netIncome,
+        generatedAt: new Date().toISOString()
+      });
+      saveData();
+      renderReports();
+    }
+
+    function exportPDF(propertyId, month, year, income, totalExpenses, netIncome) {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      const property = store.properties.find(p => p.id === propertyId);
+      const monthName = ['January','February','March','April','May','June','July','August','September','October','November','December'][month-1];
+      
+      doc.setFontSize(18);
+      doc.text('Owner Report', 20, 20);
+      doc.setFontSize(12);
+      doc.text(property.name, 20, 30);
+      doc.text(property.address, 20, 36);
+      doc.text(`${monthName} ${year}`, 20, 42);
+      
+      doc.line(20, 48, 190, 48);
+      doc.setFontSize(14);
+      doc.text('Income Statement', 20, 56);
+      doc.setFontSize(11);
+      doc.text(`Rental Income (${property.units} units)`, 20, 64);
+      doc.text(`$${income.toLocaleString()}`, 160, 64, { align: 'right' });
+      
+      let y = 74;
+      const monthExpenses = store.expenses.filter(e => {
+        const d = new Date(e.date);
+        return e.propertyId === propertyId && d.getMonth() + 1 === month && d.getFullYear() === year;
+      });
+      
+      const expensesByCategory = {};
+      monthExpenses.forEach(e => {
+        expensesByCategory[e.category] = (expensesByCategory[e.category] || 0) + parseFloat(e.amount);
+      });
+      
+      doc.text('Expenses:', 20, y);
+      y += 8;
+      for (const [cat, amt] of Object.entries(expensesByCategory)) {
+        doc.text(cat, 25, y);
+        doc.text(`$${amt.toFixed(2)}`, 160, y, { align: 'right' });
+        y += 6;
+      }
+      
+      doc.line(20, y, 190, y);
+      y += 8;
+      doc.setFontSize(12);
+      doc.text('Net Cash Flow:', 20, y);
+      doc.text(`$${netIncome.toLocaleString()}`, 160, y, { align: 'right' });
+      
+      doc.setFontSize(9);
+      doc.text(`Generated: ${new Date().toLocaleString()}`, 20, 280);
+      
+      doc.save(`${property.name.replace(/\s+/g,'_')}_${monthName}_${year}.pdf`);
+    }
+
+    function renderReports() {
+      const tbody = document.getElementById('reports-list');
+      if (!store.reports.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty">No reports generated yet</td></tr>';
+        return;
+      }
+      tbody.innerHTML = store.reports.slice().reverse().map(r => {
+        const prop = store.properties.find(p => p.id === r.propertyId);
+        const monthName = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][r.month-1];
+        return `<tr>
+          <td>${new Date(r.generatedAt).toLocaleDateString()}</td>
+          <td>${prop?.name || 'Unknown'}</td>
+          <td>${monthName} ${r.year}</td>
+          <td style="color:${r.netIncome >= 0 ? 'green':'red'};font-weight:bold;">$${r.netIncome.toLocaleString()}</td>
+          <td><button class="btn btn-secondary" style="padding:0.25rem 0.5rem;" onclick="alert('Re-download from report generator')">View</button></td>
+        </tr>`;
+      }).join('');
+    }
+
+    function renderAll() {
+      renderProperties();
+      renderCategories();
+      renderExpenses();
+      renderOwners();
+      populateReportForms();
+      renderReports();
+    }
+
+    // Initialize
+    renderAll();
+  </script>
+</body>
+</html>
